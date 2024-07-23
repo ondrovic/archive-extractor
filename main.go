@@ -1,17 +1,17 @@
 package main
 
 import (
-    "fmt"
-    "os"
+	"fmt"
+	"os"
 
+	"archive-extractor/cmd"
 	"archive-extractor/internal/utils"
-    "archive-extractor/cmd"
 )
 
 func main() {
 	utils.ClearConsole()
-    if err := cmd.Execute(); err != nil {
-        fmt.Println(err)
-        os.Exit(1)
-    }
+	if err := cmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
