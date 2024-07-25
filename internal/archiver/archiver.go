@@ -1,7 +1,9 @@
 package archiver
 
 import (
+	"archive-extractor/internal/progress"
 	"archive-extractor/internal/utils"
+	"archive-extractor/internal/models"
 	"archive/zip"
 	"fmt"
 	"io"
@@ -23,58 +25,6 @@ var (
 	}
 )
 
-type progressReader struct {
-	reader   io.Reader
-	callback func(int64)
-}
-
-func (pr *progressReader) Read(p []byte) (int, error) {
-	n, err := pr.reader.Read(p)
-	pr.callback(int64(n))
-	return n, err
-}
-
-type ArchiveFile interface {
-	Name() string
-	HeaderName() string
-}
-
-type zipFile struct {
-	*zip.File
-}
-
-func (f zipFile) Name() string {
-	return f.File.Name
-}
-
-func (f zipFile) HeaderName() string {
-	return f.File.FileHeader.Name
-}
-
-type rarFile struct {
-	*rardecode.FileHeader
-}
-
-func (f rarFile) Name() string {
-	return f.FileHeader.Name
-}
-
-func (f rarFile) HeaderName() string {
-	return f.FileHeader.Name // RAR doesn't have a separate header name
-}
-
-type sevenZipFile struct {
-	*sevenzip.File
-}
-
-func (f sevenZipFile) Name() string {
-	return f.File.Name
-}
-
-func (f sevenZipFile) HeaderName() string {
-	return f.File.Name // 7zip doesn't have a separate header name
-}
-
 func IsArchive(file string) bool {
 	ext := strings.ToLower(filepath.Ext(file))
 	for _, e := range supportedArchives {
@@ -85,9 +35,7 @@ func IsArchive(file string) bool {
 	return false
 }
 
-type ProgressCallback func(current, total int64)
-
-func ExtractArchive(src, dest string, progressCallback ProgressCallback) (error) {
+func ExtractArchive(src, dest string, progressCallback progress.ProgressCallback) (error) {
 	ext := strings.ToLower(filepath.Ext(src))
 	switch ext {
 	case ".zip":
@@ -99,7 +47,7 @@ func ExtractArchive(src, dest string, progressCallback ProgressCallback) (error)
 	}
 }
 
-func shouldSkip(f ArchiveFile) bool {
+func shouldSkip(f models.ArchiveFile) bool {
 	name := f.Name()
 	baseName := filepath.Base(name)
 	headerName := f.HeaderName()
@@ -114,7 +62,7 @@ func shouldSkip(f ArchiveFile) bool {
 	return false
 }
 
-func extractZip(src, dest string, progressCallback ProgressCallback) (error) {
+func extractZip(src, dest string, progressCallback progress.ProgressCallback) (error) {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %v", err)
@@ -132,7 +80,7 @@ func extractZip(src, dest string, progressCallback ProgressCallback) (error) {
 
 	for _, f := range r.File {
 		// skip files containing filesToSkip
-		if shouldSkip(zipFile{f}) {
+		if shouldSkip(&models.ZipFile{File: f}) {
 			continue
 		}
 
@@ -175,9 +123,9 @@ func extractZip(src, dest string, progressCallback ProgressCallback) (error) {
 			return fmt.Errorf("failed to create file %s: %v", path, err)
 		}
 
-		_, err = io.Copy(destFile, &progressReader{
-			reader: rc,
-			callback: func(size int64) {
+		_, err = io.Copy(destFile, &progress.ProgressReader{
+			Reader: rc,
+			Callback: func(size int64) {
 				mu.Lock()
 				extractedSize += size
 				progressCallback(extractedSize, totalSize)
@@ -196,7 +144,7 @@ func extractZip(src, dest string, progressCallback ProgressCallback) (error) {
 	return nil
 }
 
-func extractRar(src, dest string, progressCallback ProgressCallback) error {
+func extractRar(src, dest string, progressCallback progress.ProgressCallback) error {
 	r, err := rardecode.OpenReader(src, "")
 	if err != nil {
 		return fmt.Errorf("failed to open rar: %v", err)
@@ -233,7 +181,7 @@ func extractRar(src, dest string, progressCallback ProgressCallback) error {
 			return fmt.Errorf("failed to read rar header: %v", err)
 		}
 
-		if shouldSkip(rarFile{header}) {
+		if shouldSkip(&models.RarFile{FileHeader: header}) {
 			continue
 		}
 
@@ -264,9 +212,9 @@ func extractRar(src, dest string, progressCallback ProgressCallback) error {
 			return fmt.Errorf("failed to create file %s: %v", path, err)
 		}
 
-		_, err = io.Copy(destFile, &progressReader{
-			reader: r,
-			callback: func(size int64) {
+		_, err = io.Copy(destFile, &progress.ProgressReader{
+			Reader: r,
+			Callback: func(size int64) {
 				mu.Lock()
 				extractedSize += size
 				progressCallback(extractedSize, totalSize)
@@ -284,7 +232,7 @@ func extractRar(src, dest string, progressCallback ProgressCallback) error {
 	return nil
 }
 
-func extractSevenZip(src, dest string, progressCallback ProgressCallback) error {
+func extractSevenZip(src, dest string, progressCallback progress.ProgressCallback) error {
 	r, err := sevenzip.OpenReader(src)
 	if err != nil {
 		return fmt.Errorf("failed to open 7z: %v", err)
@@ -300,7 +248,7 @@ func extractSevenZip(src, dest string, progressCallback ProgressCallback) error 
 	var mu sync.Mutex
 
 	for _, f := range r.File {
-		if shouldSkip(sevenZipFile{f}) {
+		if shouldSkip(&models.SevenZipFile{File: f}) {
 			continue
 		}
 		// Sanitize the file path
@@ -335,9 +283,9 @@ func extractSevenZip(src, dest string, progressCallback ProgressCallback) error 
 			return fmt.Errorf("failed to create file %s: %v", path, err)
 		}
 
-		_, err = io.Copy(destFile, &progressReader{
-			reader: rc,
-			callback: func(size int64) {
+		_, err = io.Copy(destFile, &progress.ProgressReader{
+			Reader: rc,
+			Callback: func(size int64) {
 				mu.Lock()
 				extractedSize += size
 				progressCallback(extractedSize, totalSize)

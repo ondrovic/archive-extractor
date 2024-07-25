@@ -1,8 +1,21 @@
 package progress
 
 import (
+	"io"
+
 	"github.com/pterm/pterm"
 )
+
+type ProgressReader struct {
+	Reader   io.Reader
+	Callback func(int64)
+}
+
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.Reader.Read(p)
+	pr.Callback(int64(n))
+	return n, err
+}
 
 type ProgressBars struct {
 	bars       []*pterm.ProgressbarPrinter
@@ -10,6 +23,8 @@ type ProgressBars struct {
 	total      []int
 	multi      *pterm.MultiPrinter
 }
+
+type ProgressCallback func(current, total int64)
 
 func CreateDynamicProgressBars(names []string, totals []int) *ProgressBars {
 	multi := pterm.DefaultMultiPrinter
