@@ -1,9 +1,9 @@
 package archiver
 
 import (
+	"archive-extractor/internal/models"
 	"archive-extractor/internal/progress"
 	"archive-extractor/internal/utils"
-	"archive-extractor/internal/models"
 	"archive/zip"
 	"fmt"
 	"io"
@@ -35,7 +35,7 @@ func IsArchive(file string) bool {
 	return false
 }
 
-func ExtractArchive(src, dest string, progressCallback progress.ProgressCallback) (error) {
+func ExtractArchive(src, dest string, progressCallback progress.ProgressCallback) error {
 	ext := strings.ToLower(filepath.Ext(src))
 	switch ext {
 	case ".zip":
@@ -62,7 +62,7 @@ func shouldSkip(f models.ArchiveFile) bool {
 	return false
 }
 
-func extractZip(src, dest string, progressCallback progress.ProgressCallback) (error) {
+func extractZip(src, dest string, progressCallback progress.ProgressCallback) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {
 		return fmt.Errorf("failed to open zip: %v", err)
@@ -116,7 +116,7 @@ func extractZip(src, dest string, progressCallback progress.ProgressCallback) (e
 		if err != nil {
 			return fmt.Errorf("failed to open file %s in zip: %v", f.Name, err)
 		}
-		
+
 		destFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
 			rc.Close()
@@ -189,7 +189,7 @@ func extractRar(src, dest string, progressCallback progress.ProgressCallback) er
 
 		cleanName := utils.SanitizeFileName(header.Name)
 		path := filepath.Join(dest, filepath.FromSlash(cleanName))
-		
+
 		// Ensure the file path is within the destination directory
 		if !strings.HasPrefix(path, filepath.Clean(dest)+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid file path: %s", cleanName)
